@@ -1,61 +1,74 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="id">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Student Management — PaaS Minggu 7</title>
+  <title>Student Management — Secure API</title>
   <link rel="stylesheet" href="/styles.css">
   <script src="/app.js" defer></script>
 </head>
 <body>
   <main class="container">
     <header class="page-header">
-      <span class="badge">Cloudflare Workers + D1 + Express</span>
-      <h1>Student Management Dashboard</h1>
-      <p>Frontend HTML + CSS + JS &rarr; Express API &rarr; Cloudflare D1 (Fullstack CRUD)</p>
+      <h1>Student Management</h1>
+      <p>Frontend &rarr; Express API &rarr; Cloudflare D1 (Secure RBAC)</p>
     </header>
 
-    <section class="panel">
-      <h2>Form Siswa</h2>
-      <form id="student-form">
-        <input id="student-id" type="hidden">
-        <label>Nama
-          <input id="name" required maxlength="80" placeholder="Nama siswa fiktif">
-        </label>
-        <label>Kelas
-          <input id="class-name" required maxlength="30" placeholder="XII SIJA 2">
-        </label>
-        <div class="form-actions">
-          <button id="save-btn" type="submit">Tambah siswa</button>
-          <button id="cancel-btn" type="button" hidden>Batal edit</button>
-        </div>
+    <section id="login-panel" class="panel">
+      <h2>Login</h2>
+      <p>Gunakan akun demo yang dibuat oleh script seed (viewer, editor, admin).</p>
+      <form id="login-form">
+        <label for="email">Email</label>
+        <input id="email" type="email" autocomplete="username" required placeholder="admin@paas.local">
+        <label for="password">Password</label>
+        <input id="password" type="password" autocomplete="current-password" required placeholder="Password demo">
+        <button id="login-button" type="submit">Masuk</button>
       </form>
-      <p id="message" role="status" aria-live="polite"></p>
+      <p id="login-message" class="message" role="status" aria-live="polite"></p>
     </section>
 
-    <section class="panel">
-      <div class="panel-header">
-        <h2>Daftar Siswa</h2>
-        <div class="actions-bar">
-          <input id="search-input" type="search" placeholder="Cari nama/kelas..." style="max-width: 220px;">
-          <button id="refresh-btn" type="button">Muat ulang data</button>
+    <section id="dashboard" hidden>
+      <div class="panel user-bar">
+        <p id="current-user"></p>
+        <button id="logout-button" class="secondary" type="button">Logout</button>
+      </div>
+
+      <section id="student-editor" class="panel">
+        <h2>Form Siswa</h2>
+        <form id="student-form">
+          <input id="student-id" type="hidden">
+          <label for="name">Nama</label>
+          <input id="name" maxlength="80" required placeholder="Nama siswa fiktif">
+          <label for="class-name">Kelas</label>
+          <input id="class-name" maxlength="30" required placeholder="XI SIJA">
+          <div class="button-row">
+            <button id="save-button" type="submit">Tambah siswa</button>
+            <button id="cancel-button" class="secondary" type="button" hidden>Batal edit</button>
+          </div>
+        </form>
+        <p id="message" class="message" role="status" aria-live="polite"></p>
+      </section>
+
+      <section class="panel">
+        <div class="section-heading">
+          <h2>Daftar Siswa</h2>
+          <button id="refresh-button" class="secondary" type="button">Muat ulang</button>
         </div>
-      </div>
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th style="width: 70px;">ID</th>
-              <th>Nama</th>
-              <th>Kelas</th>
-              <th style="width: 170px;">Aksi</th>
-            </tr>
-          </thead>
-          <tbody id="student-rows"></tbody>
-        </table>
-      </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Nama</th>
+                <th>Kelas</th>
+                <th>Aksi</th>
+              </tr>
+            </thead>
+            <tbody id="student-rows"></tbody>
+          </table>
+        </div>
+      </section>
     </section>
   </main>
 </body>
 </html>
-

@@ -1,56 +1,92 @@
-const form = document.getElementById("student-form");
-const studentId = document.getElementById("student-id");
+const loginPanel = document.getElementById("login-panel");
+const dashboard = document.getElementById("dashboard");
+const loginForm = document.getElementById("login-form");
+const loginMessage = document.getElementById("login-message");
+const currentUserText = document.getElementById("current-user");
+const studentEditor = document.getElementById("student-editor");
+const studentForm = document.getElementById("student-form");
+const studentIdInput = document.getElementById("student-id");
 const nameInput = document.getElementById("name");
 const classInput = document.getElementById("class-name");
-const rows = document.getElementById("student-rows");
+const saveButton = document.getElementById("save-button");
+const cancelButton = document.getElementById("cancel-button");
 const message = document.getElementById("message");
-const saveBtn = document.getElementById("save-btn");
-const cancelBtn = document.getElementById("cancel-btn");
-const searchInput = document.getElementById("search-input");
+const rows = document.getElementById("student-rows");
 
-let cachedStudents = [];
+let accessToken = null;
+let currentUser = null;
 
-function notify(text, isError = false) {
+function notify(text) {
   message.textContent = text;
-  message.className = isError ? "error" : "success";
+}
+
+function showLogin(text) {
+  accessToken = null;
+  currentUser = null;
+  dashboard.hidden = true;
+  loginPanel.hidden = false;
+  rows.replaceChildren();
+  studentForm.reset();
+  loginForm.reset();
+  loginMessage.textContent = text || "";
+}
+
+function logout() {
+  showLogin("Anda sudah logout. Silakan login kembali.");
 }
 
 async function api(path, options = {}) {
-  const response = await fetch(path, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...(options.headers || {})
-    }
-  });
+  const headers = new Headers(options.headers || {});
+  if (options.body !== undefined) {
+    headers.set("Content-Type", "application/json");
+  }
+  if (accessToken) {
+    headers.set("Authorization", "Bearer " + accessToken);
+  }
+
+  const response = await fetch(path, { ...options, headers });
   const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(body.error || "HTTP " + response.status);
+  if (!response.ok) {
+    if (response.status === 401 && accessToken) {
+      showLogin("Sesi berakhir atau token tidak valid. Silakan login kembali.");
+    }
+    throw new Error(body.error || ("HTTP " + response.status));
+  }
   return body;
 }
 
-function td(text) {
-  const item = document.createElement("td");
-  item.textContent = String(text ?? "");
-  return item;
+function cell(value) {
+  const td = document.createElement("td");
+  td.textContent = String(value ?? "");
+  return td;
 }
 
-function resetForm() {
-  form.reset();
-  studentId.value = "";
-  saveBtn.textContent = "Tambah siswa";
-  cancelBtn.hidden = true;
+function resetStudentForm() {
+  studentForm.reset();
+  studentIdInput.value = "";
+  saveButton.textContent = "Tambah siswa";
+  cancelButton.hidden = true;
 }
 
-function renderTable(students) {
+function applyRolePermissions() {
+  const role = currentUser.role;
+  studentEditor.hidden = role === "viewer";
+  if (role === "viewer") {
+    notify("Mode viewer: Anda hanya dapat membaca data.");
+  } else {
+    notify("Anda login sebagai " + role + ".");
+  }
+}
+
+async function loadStudents() {
+  const response = await api("/api/students");
+  const students = Array.isArray(response.data) ? response.data : [];
   rows.replaceChildren();
 
   if (students.length === 0) {
     const tr = document.createElement("tr");
-    const empty = td("Belum ada data siswa");
+    const empty = cell("Belum ada data");
     empty.colSpan = 4;
-    empty.style.textAlign = "center";
-    empty.style.color = "#94a3b8";
-    empty.style.padding = "24px";
     tr.append(empty);
     rows.append(tr);
     return;
@@ -60,77 +96,85 @@ function renderTable(students) {
     const tr = document.createElement("tr");
     const actions = document.createElement("td");
 
-    const edit = document.createElement("button");
-    edit.textContent = "Edit";
-    edit.type = "button";
-    edit.addEventListener("click", () => {
-      studentId.value = student.id;
-      nameInput.value = student.name;
-      classInput.value = student.class_name;
-      saveBtn.textContent = "Simpan perubahan";
-      cancelBtn.hidden = false;
-      nameInput.focus();
-    });
+    if (currentUser.role === "editor" || currentUser.role === "admin") {
+      const editButton = document.createElement("button");
+      editButton.type = "button";
+      editButton.textContent = "Edit";
+      editButton.addEventListener("click", () => {
+        studentIdInput.value = String(student.id);
+        nameInput.value = student.name;
+        classInput.value = student.class_name;
+        saveButton.textContent = "Simpan perubahan";
+        cancelButton.hidden = false;
+        nameInput.focus();
+        studentEditor.scrollIntoView({ behavior: "smooth" });
+      });
+      actions.append(editButton);
+    }
 
-    const remove = document.createElement("button");
-    remove.textContent = "Hapus";
-    remove.type = "button";
-    remove.className = "danger";
-    remove.addEventListener("click", async () => {
-      if (!window.confirm(`Hapus data siswa "${student.name}" (ID: ${student.id})?`)) return;
-      try {
-        await api("/api/students/" + student.id, { method: "DELETE" });
-        if (studentId.value === String(student.id)) resetForm();
-        await loadStudents();
-        notify("Data siswa berhasil dihapus.");
-      } catch (error) {
-        notify("Gagal menghapus: " + error.message, true);
-      }
-    });
+    if (currentUser.role === "admin") {
+      const deleteButton = document.createElement("button");
+      deleteButton.type = "button";
+      deleteButton.textContent = "Hapus";
+      deleteButton.className = "danger";
+      deleteButton.addEventListener("click", async () => {
+        if (!window.confirm("Hapus data siswa fiktif ini?")) return;
+        try {
+          await api("/api/students/" + student.id, { method: "DELETE" });
+          if (studentIdInput.value === String(student.id)) {
+            resetStudentForm();
+          }
+          await loadStudents();
+          notify("Data berhasil dihapus.");
+        } catch (error) {
+          notify("Gagal menghapus: " + error.message);
+        }
+      });
+      actions.append(deleteButton);
+    }
 
-    actions.append(edit, remove);
-    tr.append(td(student.id), td(student.name), td(student.class_name), actions);
+    if (!actions.hasChildNodes()) {
+      actions.textContent = "Tidak ada aksi";
+    }
+
+    tr.append(
+      cell(student.id),
+      cell(student.name),
+      cell(student.class_name),
+      actions
+    );
     rows.append(tr);
   }
 }
 
-async function loadStudents() {
-  const response = await api("/api/students");
-  cachedStudents = Array.isArray(response.data) ? response.data : [];
-  applyFilter();
-}
+loginForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  loginMessage.textContent = "Memeriksa akun...";
+  const email = document.getElementById("email").value.trim();
+  const password = document.getElementById("password").value;
 
-function applyFilter() {
-  const query = searchInput ? searchInput.value.trim().toLowerCase() : "";
-  if (!query) {
-    renderTable(cachedStudents);
-    return;
+  try {
+    const result = await api("/api/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ email, password })
+    });
+    accessToken = result.token;
+    currentUser = result.user;
+    loginPanel.hidden = true;
+    dashboard.hidden = false;
+    currentUserText.textContent = currentUser.email + " — role: " + currentUser.role;
+    applyRolePermissions();
+    await loadStudents();
+  } catch (error) {
+    loginMessage.textContent = error.message;
   }
-  const filtered = cachedStudents.filter((s) => {
-    return (
-      (s.name && s.name.toLowerCase().includes(query)) ||
-      (s.class_name && s.class_name.toLowerCase().includes(query)) ||
-      String(s.id).includes(query)
-    );
-  });
-  renderTable(filtered);
-}
+});
 
-if (searchInput) {
-  searchInput.addEventListener("input", applyFilter);
-}
-
-form.addEventListener("submit", async (event) => {
+studentForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   const name = nameInput.value.trim();
   const class_name = classInput.value.trim();
-
-  if (!name || !class_name) {
-    notify("Isi nama dan kelas.", true);
-    return;
-  }
-
-  const editingId = studentId.value;
+  const editingId = studentIdInput.value;
   const path = editingId ? "/api/students/" + editingId : "/api/students";
 
   try {
@@ -138,24 +182,25 @@ form.addEventListener("submit", async (event) => {
       method: editingId ? "PUT" : "POST",
       body: JSON.stringify({ name, class_name })
     });
-    resetForm();
+    resetStudentForm();
     await loadStudents();
-    notify(editingId ? "Perubahan siswa berhasil disimpan." : "Siswa baru berhasil ditambahkan.");
+    notify("Data berhasil disimpan.");
   } catch (error) {
-    notify("Gagal menyimpan: " + error.message, true);
+    notify("Gagal menyimpan: " + error.message);
   }
 });
 
-cancelBtn.addEventListener("click", resetForm);
+cancelButton.addEventListener("click", resetStudentForm);
 
-document.getElementById("refresh-btn").addEventListener("click", async () => {
+document.getElementById("refresh-button").addEventListener("click", async () => {
   try {
     await loadStudents();
-    notify("Data diperbarui.");
+    notify("Data berhasil dimuat ulang.");
   } catch (error) {
-    notify("Gagal memuat: " + error.message, true);
+    notify("Gagal memuat data: " + error.message);
   }
 });
 
-loadStudents().catch((error) => notify("Gagal memuat: " + error.message, true));
+document.getElementById("logout-button").addEventListener("click", logout);
 
+showLogin("");
