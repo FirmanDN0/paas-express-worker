@@ -1,7 +1,7 @@
 {
   "name": "paas-express-worker",
   "version": "1.0.0",
-  "description": "Minggu 6 - Deploy Express + Cloudflare D1 (CRUD)",
+  "description": "Minggu 7 — Integrasi Frontend + Express + Cloudflare D1 (Fullstack CRUD)",
   "main": "src/index.ts",
   "scripts": {
     "dev": "wrangler dev",

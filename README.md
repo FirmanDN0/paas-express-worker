@@ -1,60 +1,54 @@
-# PaaS Minggu 6 — Deploy Express + Cloudflare D1 (CRUD)
+# PaaS Minggu 7 — Integrasi Frontend + Express + Cloudflare D1 (Fullstack CRUD)
 
-Repository ini berisi implementasi praktikum Minggu 6 mata pelajaran **Platform as a Service (PaaS)**: Lanjutan project Express.js di Cloudflare Workers dengan integrasi database relasional **Cloudflare D1 (SQLite-based)** untuk REST API CRUD persisten.
+Repository ini berisi implementasi praktikum Minggu 7 mata pelajaran **Platform as a Service (PaaS)**: Integrasi antarmuka pengguna frontend (HTML, CSS, JavaScript) dengan backend REST API Express.js dan database relasional Cloudflare D1 dalam satu Cloudflare Worker yang sama memanfaatkan fitur **Workers Static Assets**.
 
 ---
 
 ## 🔗 Tautan Penting
 - **GitHub Repository**: [https://github.com/FirmanDN0/paas-express-worker](https://github.com/FirmanDN0/paas-express-worker)
-- **Production URL**: [https://paas-express-worker.samnamrif8.workers.dev](https://paas-express-worker.samnamrif8.workers.dev)
+- **Live Production URL**: [https://paas-express-worker.samnamrif8.workers.dev](https://paas-express-worker.samnamrif8.workers.dev)
 
 ---
 
-## 🧠 Arsitektur: Express + Cloudflare D1
+## 🧠 1. Konsep & Arsitektur
 
 ```mermaid
 flowchart LR
-  A["HTTP Client"] --> B["Cloudflare Worker"]
-  B --> C["Express Routes"]
-  C --> D["D1 Binding - env.DB"]
-  D --> E["D1 SQL Database"]
-  E --> C
-  C --> F["JSON Response"]
+  A["Browser: HTML/CSS/JS"] -->|"fetch /api/students"| B["Cloudflare Workers: Express API"]
+  B <-->|"Binding DB"| C["Cloudflare D1 (SQLite)"]
+  B -->|"JSON Response"| A
+  D["Local Project"] -->|"Wrangler deploy"| B
+  E["Workers Static Assets"] -->|"index.html, styles.css, app.js"| A
 ```
 
-- **Runtime**: Cloudflare Workers (`@cloudflare/workers-types`, `nodejs_compat`)
-- **Web Framework**: Express.js (`httpServerHandler` via `cloudflare:node`)
-- **Database**: Cloudflare D1 (`paas-students-db`, binding: `env.DB`)
+- **Satu Origin (Same-Origin)**: Frontend disajikan langsung dari Cloudflare Static Assets di root URL (`/`), sedangkan API Express disajikan di `/api/*`. Tidak memerlukan konfigurasi CORS lintas-origin.
+- **Routing Priority**: Menggunakan konfigurasi `run_worker_first: ["/api/*"]`, sehingga seluruh request ke `/api/*` diteruskan ke Worker Express + D1, sementara file aset statis (`/`, `/styles.css`, `/app.js`) disajikan secara instan via CDN Cloudflare.
+- **Keamanan DOM**: Menggunakan `textContent` dan DOM API (`createElement`, `replaceChildren`) untuk mencegah celah keamanan Cross-Site Scripting (XSS).
 
 ---
 
-## 🚀 Endpoint REST API (CRUD)
+## 🧱 2. Struktur Project
 
-| Method | Endpoint | SQL Query | Deskripsi | Status Code |
-| :--- | :--- | :--- | :--- | :--- |
-| `GET` | `/` | - | Root API status & info | `200 OK` |
-| `GET` | `/api/students` | `SELECT ... ORDER BY id DESC` | Ambil seluruh daftar siswa | `200 OK` |
-| `GET` | `/api/students/:id` | `SELECT ... WHERE id = ?` | Ambil data siswa berdasarkan ID | `200 OK` / `404 Not Found` |
-| `POST` | `/api/students` | `INSERT INTO students ...` | Buat data siswa baru | `201 Created` / `400 Bad Request` |
-| `PUT` | `/api/students/:id` | `UPDATE students SET ... WHERE id = ?` | Perbarui data siswa berdasarkan ID | `200 OK` / `404 Not Found` |
-| `DELETE` | `/api/students/:id` | `DELETE FROM students WHERE id = ?` | Hapus data siswa berdasarkan ID | `200 OK` / `404 Not Found` |
+```
+paas-express-worker/
+├── public/
+│   ├── index.html        # Antarmuka dashboard siswa (Form + Tabel)
+│   ├── styles.css        # Tata letak & styling responsif
+│   └── app.js            # Interaksi Fetch API, DOM rendering, & event listeners
+├── src/
+│   └── index.ts          # Backend Express + D1 Prepared SQL Queries (CRUD)
+├── migrations/
+│   └── 0001_create_students.sql  # Skema tabel database D1
+├── wrangler.jsonc        # Konfigurasi Worker, Static Assets, & Binding D1
+├── package.json
+└── tsconfig.json
+```
 
 ---
 
-## 🗄️ Database & Migrations
+## ⚙️ 3. Konfigurasi Workers Static Assets (`wrangler.jsonc`)
 
-### Skema Tabel (`migrations/0001_create_students.sql`)
-```sql
-CREATE TABLE IF NOT EXISTS students (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  name TEXT NOT NULL,
-  class_name TEXT NOT NULL,
-  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-```
-
-### Binding D1 di `wrangler.jsonc`
-```json
+```jsonc
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "paas-express-worker",
@@ -63,6 +57,10 @@ CREATE TABLE IF NOT EXISTS students (
   "compatibility_flags": [
     "nodejs_compat"
   ],
+  "assets": {
+    "directory": "./public",
+    "run_worker_first": ["/api/*"]
+  },
   "d1_databases": [
     {
       "binding": "DB",
@@ -75,89 +73,66 @@ CREATE TABLE IF NOT EXISTS students (
 
 ---
 
-## 🛠️ Panduan Pengujian CRUD
+## 🚀 4. REST API Endpoint (CRUD)
 
-### 1. Pengujian Lokal (`wrangler dev`)
-
-```bash
-# Jalankan migrasi lokal
-npx wrangler d1 migrations apply paas-students-db --local
-
-# Jalankan server lokal
-npm run dev
-```
-
-### 2. Pengujian Production (`workers.dev`)
-
-```bash
-# Terapkan migrasi ke D1 remote
-npx wrangler d1 migrations apply paas-students-db --remote
-
-# Deploy worker ke Cloudflare
-npm run deploy
-```
-
-#### Contoh Perintah cURL:
-
-1. **CREATE (POST)**:
-```bash
-curl -X POST https://paas-express-worker.samnamrif8.workers.dev/api/students \
-  -H "Content-Type: application/json" \
-  -d '{"name":"Siswa Demo A","class_name":"XII SIJA 2"}'
-```
-
-2. **READ ALL (GET)**:
-```bash
-curl https://paas-express-worker.samnamrif8.workers.dev/api/students
-```
-
-3. **READ ONE (GET)**:
-```bash
-curl https://paas-express-worker.samnamrif8.workers.dev/api/students/1
-```
-
-4. **UPDATE (PUT)**:
-```bash
-curl -X PUT https://paas-express-worker.samnamrif8.workers.dev/api/students/1 \
-  -H "Content-Type: application/json" \
-  -d '{"name":"Siswa Demo B","class_name":"XII SIJA 2"}'
-```
-
-5. **DELETE**:
-```bash
-curl -X DELETE https://paas-express-worker.samnamrif8.workers.dev/api/students/1
-```
+| Method | Endpoint | Fungsi | Handler |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/` | Menampilkan dashboard Student Management | Workers Static Assets (`public/index.html`) |
+| `GET` | `/api/students` | Mengambil seluruh daftar siswa (JSON) | Express + D1 (`SELECT ... ORDER BY id DESC`) |
+| `GET` | `/api/students/:id` | Mengambil detail siswa berdasarkan ID | Express + D1 (`SELECT ... WHERE id = ?`) |
+| `POST` | `/api/students` | Menambahkan data siswa baru | Express + D1 (`INSERT INTO students ...`) |
+| `PUT` | `/api/students/:id` | Memperbarui data siswa berdasarkan ID | Express + D1 (`UPDATE students SET ... WHERE id = ?`) |
+| `DELETE` | `/api/students/:id` | Menghapus data siswa berdasarkan ID | Express + D1 (`DELETE FROM students WHERE id = ?`) |
 
 ---
 
-## 💭 Jawaban Refleksi Modul Minggu 6
+## 🧪 5. Panduan Pengujian & Deployment
 
-1. **Apa perbedaan data dalam variabel JavaScript dan dalam D1?**
-   - Variabel JavaScript disimpan dalam memori RAM (in-memory) isolate Worker yang bersifat sementara (*ephemeral/stateless*). Jika Worker idle, cold restart, atau berpindah lokasi edge, data variabel akan hilang.
-   - Cloudflare D1 menyimpan data secara persisten dan terdistribusi di database relasional SQL (SQLite-based), sehingga data tetap utuh meskipun Worker berhenti atau berganti instance.
+### Menjalankan Development Server Lokal
+```bash
+npm run dev
+```
+Buka browser di [http://localhost:8787](http://localhost:8787).
 
-2. **Apa fungsi binding DB dan `env.DB`?**
-   - Binding DB menghubungkan konfigurasi database di Cloudflare ke kode Worker tanpa perlu memasukkan kredensial / password database secara manual.
-   - `env.DB` adalah objek API runtime yang disediakan oleh Cloudflare Workers untuk menjalankan prepared statements, query, migrasi, dan transaksi SQL langsung ke database D1.
+### Deploy ke Cloudflare Workers
+```bash
+npm run deploy
+```
+Akses URL publik: `https://paas-express-worker.samnamrif8.workers.dev/`
 
-3. **Mengapa prepared SQL menggunakan `bind()`?**
-   - Menggunakan `bind()` mencegah kerentanan **SQL Injection** dengan memisahkan struktur query SQL dari data input pengguna.
-   - Memastikan tipe data dikonversi secara aman oleh database driver dan mengoptimalkan performa query parsing.
+---
 
-4. **Apa perbedaan D1 lokal dan remote?**
-   - **D1 lokal**: Menggunakan file SQLite yang disimpan secara lokal di mesin pengembang (`.wrangler/state/v3/d1`) untuk keperluan testing cepat tanpa koneksi internet.
-   - **D1 remote**: Database D1 sesungguhnya yang berjalan di infrastruktur Cloudflare Edge global dan diakses oleh Worker production di `*.workers.dev`.
+## 💭 6. Jawaban Refleksi Modul Minggu 7
 
-5. **Mengapa migration remote harus dilakukan sebelum uji CRUD live?**
-   - Karena D1 lokal dan D1 remote adalah dua database yang sepenuhnya terpisah. Jika skema tabel belum dimigrasikan ke remote, aplikasi Worker production akan mengalami error `no such table: students` saat memproses query SQL.
+1. **Mengapa frontend tidak boleh langsung membaca D1?**
+   - Cloudflare D1 adalah database backend yang tidak mengekspos port atau kredensial langsung ke internet publik.
+   - Jika browser langsung menghubungi database, kredensial dan hak akses database akan bocor ke klien, sehingga siapa saja dapat memanipulasi, mencuri, atau menghapus seluruh isi database tanpa validasi atau kontrol bisnis.
+   - Backend Express bertindak sebagai perantara yang aman (gatekeeper) untuk memvalidasi input, menjalankan otorisasi, dan mengeksekusi parameterized query.
 
-6. **Apa perbedaan metode GET, POST, PUT, DELETE?**
-   - `GET`: Mengambil/membaca data dari server tanpa mengubah state database (Idempoten & Safe).
-   - `POST`: Menambahkan data record baru ke dalam database.
-   - `PUT`: Memperbarui seluruh field record yang sudah ada berdasarkan identifier (Idempoten).
-   - `DELETE`: Menghapus data record dari database berdasarkan identifier (Idempoten).
+2. **Apa fungsi `fetch()` dan apa beda request vs JSON response?**
+   - `fetch()` adalah API bawaan browser JavaScript untuk melakukan komunikasi asynchronous HTTP ke server secara terprogram tanpa memuat ulang (reload) halaman.
+   - **Request**: Pesan yang dikirim dari browser ke server, berisi method (GET, POST, PUT, DELETE), header (seperti `Content-Type: application/json`), URL path, dan payload body JSON (pada POST/PUT).
+   - **JSON Response**: Pesan balasan dari server ke browser yang berisi status code HTTP (misal: 200, 201, 404, 500) dan payload data dalam format teks JSON yang kemudian diparsing dengan `.json()` menjadi objek JavaScript.
 
-7. **Error apa yang muncul dan bagaimana membaca log untuk menyelesaikannya?**
-   - **No such table**: Ditangani dengan menjalankan `wrangler d1 migrations apply --remote`.
-   - **env.DB undefined**: Ditangani dengan menyelaraskan nama binding di `wrangler.jsonc` (`binding: "DB"`).
-   - **Observabilitas**: Log error dapat dipantau langsung secara realtime menggunakan `npx wrangler tail` untuk melihat stack trace dan HTTP status code request.
+3. **Mengapa browser dan API memakai URL asal yang sama (Same-Origin)?**
+   - Karena frontend dan backend disajikan di domain yang sama (`https://paas-express-worker.samnamrif8.workers.dev`), browser tidak terhalang oleh kebijakan keamanan lintas-domain (Same-Origin Policy).
+   - Ini menyederhanakan komunikasi: pemanggilan `fetch("/api/students")` cukup menggunakan path relatif tanpa perlu URL absolut, tanpa perlu preflight `OPTIONS` request, dan bebas dari isu CORS (*Cross-Origin Resource Sharing*).
+
+4. **Kenapa data tetap ada setelah halaman di-refresh?**
+   - Data siswa disimpan di database relasional persisten **Cloudflare D1** pada jaringan edge global, bukan di variabel lokal memori browser.
+   - Setiap kali halaman dibuka atau di-refresh, skrip `app.js` mengeksekusi `loadStudents()` yang melakukan `fetch("/api/students")` untuk mengambil data terbaru langsung dari database D1.
+
+5. **Apa beda localhost D1 dan D1 remote?**
+   - **Localhost D1**: Database lokal tiruan (berkas SQLite di direktori `.wrangler/state/v3/d1`) yang hanya ada di laptop/komputer pengembang untuk pengujian cepat secara offline.
+   - **D1 Remote**: Database produksi sebenarnya yang di-host di data center Cloudflare global dan diakses oleh Worker live di internet.
+
+6. **Mengapa `textContent` lebih aman daripada menaruh data pengguna langsung ke `innerHTML`?**
+   - `innerHTML` menginstruksikan browser untuk mem-parsing input string sebagai kode HTML. Jika data input berisi tag berbahaya seperti `<img src=x onerror=alert(1)>` atau skrip jahat, kode tersebut akan dieksekusi oleh browser (celah keamanan **Cross-Site Scripting / XSS**).
+   - `textContent` selalu memperlakukan input secara murni sebagai teks biasa (*plain text*), sehingga karakter HTML seperti `<`, `>`, dan `&` tidak dieksekusi sebagai tag browser.
+
+7. **Error apa yang ditemukan dan bagaimana cara mengujinya lewat Network/Logs?**
+   - Error seperti 400 (Bad Request) atau 404 (Not Found) dapat diinspeksi melalui tab **DevTools Browser → Network**:
+     - Memeriksa **Headers**: Request URL, Request Method, dan Status Code.
+     - Memeriksa **Payload**: Format JSON yang dikirim apakah sesuai (`name`, `class_name`).
+     - Memeriksa **Response**: Pesan error JSON yang dikembalikan dari backend (`{ "error": "..." }`).
+   - Di sisi server, kita dapat menjalankan `npx wrangler tail` untuk melihat streaming log dan pesan error yang dicetak oleh `console.error` di Cloudflare Workers.
