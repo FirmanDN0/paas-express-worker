@@ -1,11 +1,12 @@
 {
   "name": "paas-express-worker",
   "version": "1.0.0",
-  "description": "Minggu 5 - Deploy Node.js + Express ke Cloudflare Workers",
+  "description": "Minggu 6 - Deploy Express + Cloudflare D1 (CRUD)",
   "main": "src/index.ts",
   "scripts": {
     "dev": "wrangler dev",
-    "deploy": "wrangler deploy"
+    "deploy": "wrangler deploy",
+    "cf-typegen": "wrangler types"
   },
   "dependencies": {
     "express": "^4.21.2"
